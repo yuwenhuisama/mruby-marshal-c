@@ -53,7 +53,13 @@ static mrb_int
 r_prepare(mrb_state *mrb, struct load_arg *arg)
 {
   mrb_int idx = kh_size(arg->data);
-  kh_value(arg->data, kh_put(object_load_table, mrb, arg->data, idx)) = mrb_undef_value();
+  // Split the kh_put / kh_value assignment: evaluating the kh_value() lvalue and
+  // kh_put() in one statement is UB (unsequenced) -- kh_put may rehash/realloc the
+  // table, so the lvalue address can be computed against the OLD buckets while the
+  // insertion moved them, corrupting the heap. (Same fix as upstream PR #4, which
+  // only patched dump.c; load.c had the identical latent UB, exposed by mruby 4.0.0.)
+  khint_t k = kh_put(object_load_table, mrb, arg->data, idx);
+  kh_value(object_load_table, arg->data, k) = mrb_undef_value();
   return idx;
 }
 
@@ -165,9 +171,9 @@ r_symlink(mrb_state *mrb, struct load_arg *arg)
 
   {
     khint_t i = kh_get(symbol_load_table, mrb, arg->symbols, num);
-    if (i != kh_end(arg->symbols) && kh_exist(arg->symbols, i))
+    if (i != kh_end(arg->symbols) && kh_exist(symbol_load_table, arg->symbols, i))
     {
-      return kh_value(arg->symbols, i);
+      return kh_value(symbol_load_table, arg->symbols, i);
     }
   }
 
@@ -184,7 +190,7 @@ r_symreal(mrb_state *mrb, struct load_arg *arg, int ivar)
   mrb_int n = kh_size(arg->symbols);
 
   khint_t x = kh_put(symbol_load_table, mrb, arg->symbols, n);
-  kh_value(arg->symbols, x) = 0;
+  kh_value(symbol_load_table, arg->symbols, x) = 0;
   if (ivar)
   {
     long num = r_long(mrb, arg);
@@ -198,7 +204,7 @@ r_symreal(mrb_state *mrb, struct load_arg *arg, int ivar)
     idx = ENCODING_ASCII;
   // rb_enc_associate_index(s, idx);
   id = mrb_intern_str(mrb, s);
-  kh_value(arg->symbols, x) = id;
+  kh_value(symbol_load_table, arg->symbols, x) = id;
 
   return id;
 }
@@ -250,7 +256,10 @@ r_entry0(mrb_state *mrb, mrb_value v, mrb_int num, struct load_arg *arg)
   // }
   // else
   // {
-  kh_value(arg->data, kh_put(object_load_table, mrb, arg->data, num)) = v;
+  // Split kh_put from the kh_value lvalue to avoid unsequenced-evaluation UB
+  // (kh_put may rehash the table); see r_prepare above.
+  khint_t kobj = kh_put(object_load_table, mrb, arg->data, num);
+  kh_value(object_load_table, arg->data, kobj) = v;
   //   st_insert(arg->data, num, (st_data_t)v);
   // }
   // if (arg->infection &&
@@ -340,7 +349,7 @@ static struct RClass *
 path_find_class(mrb_state *mrb, const char *path)
 {
   int ai = mrb_gc_arena_save(mrb);
-  mrb_value v = mrb_funcall_id(mrb, mrb_obj_value(mrb->object_class), MRB_SYM(const_get), 1, mrb_str_new_cstr(mrb, path));
+  mrb_value v = mrb_funcall_id(mrb, mrb_obj_value(mrb->object_class), mrb_intern_lit(mrb, "const_get"), 1, mrb_str_new_cstr(mrb, path));
   mrb_gc_arena_restore(mrb, ai);
   if (mrb_class_p(v))
     return mrb_class_ptr(v);
@@ -371,9 +380,9 @@ r_object0(mrb_state *mrb, struct load_arg *arg, int *ivp, mrb_value extmod)
 
     {
       khint_t i = kh_get(object_load_table, mrb, arg->data, id);
-      if (i != kh_end(arg->data) && kh_exist(arg->data, i))
+      if (i != kh_end(arg->data) && kh_exist(object_load_table, arg->data, i))
       {
-        v = kh_value(arg->data, i);
+        v = kh_value(object_load_table, arg->data, i);
         if (arg->proc)
         {
           mrb_assert(mrb_proc_p(*arg->proc));
@@ -610,7 +619,7 @@ r_object0(mrb_state *mrb, struct load_arg *arg, int *ivp, mrb_value extmod)
     //   }
     //   rb_str_set_len(str, dst - ptr);
     // }
-    v = r_entry0(mrb, mrb_funcall_id(mrb, mrb_obj_value(path_find_class(mrb, REGEXP_CLASS)), MRB_SYM(compile), 2, str, mrb_fixnum_value(options)), idx, arg);
+    v = r_entry0(mrb, mrb_funcall_id(mrb, mrb_obj_value(path_find_class(mrb, REGEXP_CLASS)), mrb_intern_lit(mrb, "compile"), 2, str, mrb_fixnum_value(options)), idx, arg);
     v = r_leave(mrb, v, arg);
   }
   break;
@@ -669,7 +678,7 @@ r_object0(mrb_state *mrb, struct load_arg *arg, int *ivp, mrb_value extmod)
     {
       mrb_raisef(mrb, E_TYPE_ERROR, "class %s not a struct", mrb_class_name(mrb, klass));
     }
-    mem = mrb_funcall_id(mrb, mrb_obj_value(klass), MRB_SYM(members), 0); // rb_struct_s_members(klass);
+    mem = mrb_funcall_id(mrb, mrb_obj_value(klass), mrb_intern_lit(mrb, "members"), 0); // rb_struct_s_members(klass);
     if (RARRAY_LEN(mem) != len)
     {
       mrb_raisef(mrb, E_TYPE_ERROR, "struct %s not compatible (struct size differs)", mrb_class_name(mrb, klass));
@@ -689,7 +698,7 @@ r_object0(mrb_state *mrb, struct load_arg *arg, int *ivp, mrb_value extmod)
       mrb_ary_push(mrb, values, r_object(mrb, arg));
       mrb_gc_arena_restore(mrb, ai);
     }
-    mrb_funcall_argv(mrb, v, MRB_SYM(initialize), len, RARRAY_PTR(values)); // rb_struct_initialize(v, values);
+    mrb_funcall_argv(mrb, v, mrb_intern_lit(mrb, "initialize"), len, RARRAY_PTR(values)); // rb_struct_initialize(v, values);
     v = r_leave(mrb, v, arg);
   }
   break;
