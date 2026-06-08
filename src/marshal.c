@@ -95,14 +95,18 @@ mrb_mruby_marshal_load(mrb_state *mrb, mrb_value self)
 void mrb_mruby_marshal_c_gem_init(mrb_state *mrb)
 {
   struct RClass *mrb_marshal;
-  mrb_marshal = mrb_define_module_id(mrb, MRB_SYM(Marshal));
+  // mruby 4.0.0 removed MRB_NO_PRESYM; out-of-tree gems (compiled separately
+  // against a prebuilt libmruby) can no longer use the compile-time presym
+  // symbol macro because their symbols are not in the host's generated presym
+  // id.h. Use runtime interning instead, which yields the identical mrb_sym.
+  mrb_marshal = mrb_define_module_id(mrb, mrb_intern_lit(mrb, "Marshal"));
 
-  mrb_define_module_function_id(mrb, mrb_marshal, MRB_SYM(dump), mrb_mruby_marshal_dump, MRB_ARGS_REQ(1));
-  mrb_define_module_function_id(mrb, mrb_marshal, MRB_SYM(load), mrb_mruby_marshal_load, MRB_ARGS_REQ(1));
-  mrb_define_module_function_id(mrb, mrb_marshal, MRB_SYM(restore), mrb_mruby_marshal_load, MRB_ARGS_REQ(1));
+  mrb_define_module_function_id(mrb, mrb_marshal, mrb_intern_lit(mrb, "dump"), mrb_mruby_marshal_dump, MRB_ARGS_REQ(1));
+  mrb_define_module_function_id(mrb, mrb_marshal, mrb_intern_lit(mrb, "load"), mrb_mruby_marshal_load, MRB_ARGS_REQ(1));
+  mrb_define_module_function_id(mrb, mrb_marshal, mrb_intern_lit(mrb, "restore"), mrb_mruby_marshal_load, MRB_ARGS_REQ(1));
 
-  mrb_define_const_id(mrb, mrb_marshal, MRB_SYM(MAJOR_VERSION), mrb_fixnum_value(MARSHAL_MAJOR));
-  mrb_define_const_id(mrb, mrb_marshal, MRB_SYM(MINOR_VERSION), mrb_fixnum_value(MARSHAL_MINOR));
+  mrb_define_const_id(mrb, mrb_marshal, mrb_intern_lit(mrb, "MAJOR_VERSION"), mrb_fixnum_value(MARSHAL_MAJOR));
+  mrb_define_const_id(mrb, mrb_marshal, mrb_intern_lit(mrb, "MINOR_VERSION"), mrb_fixnum_value(MARSHAL_MINOR));
 }
 
 void mrb_mruby_marshal_c_gem_final(mrb_state *mrb)

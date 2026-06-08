@@ -188,10 +188,10 @@ w_symbol(mrb_state *mrb, mrb_sym id, struct dump_arg *arg)
 {
   {
     khint_t i = kh_get(symbol_dump_table, mrb, arg->symbols, id);
-    if (i != kh_end(arg->symbols) && kh_exist(arg->symbols, i))
+    if (i != kh_end(arg->symbols) && kh_exist(symbol_dump_table, arg->symbols, i))
     {
       w_byte(mrb, TYPE_SYMLINK, arg);
-      w_long(mrb, kh_value(arg->symbols, i), arg);
+      w_long(mrb, kh_value(symbol_dump_table, arg->symbols, i), arg);
       return;
     }
   }
@@ -207,7 +207,7 @@ w_symbol(mrb_state *mrb, mrb_sym id, struct dump_arg *arg)
 
   khint_t cur_size = kh_size(arg->symbols);
   khint_t new_idx = kh_put(symbol_dump_table, mrb, arg->symbols, id);
-  kh_value(arg->symbols, new_idx) = cur_size;
+  kh_value(symbol_dump_table, arg->symbols, new_idx) = cur_size;
 }
 
 static void
@@ -355,10 +355,10 @@ w_object(mrb_state *mrb, mrb_value obj, struct dump_arg *arg, int limit)
 
   {
     khint_t i = kh_get(object_dump_table, mrb, arg->data, obj);
-    if (i != kh_end(arg->data) && kh_exist(arg->data, i))
+    if (i != kh_end(arg->data) && kh_exist(object_dump_table, arg->data, i))
     {
       w_byte(mrb, TYPE_LINK, arg);
-      w_long(mrb, (long)kh_value(arg->data, i), arg);
+      w_long(mrb, (long)kh_value(object_dump_table, arg->data, i), arg);
       return;
     }
   }
@@ -408,7 +408,7 @@ w_object(mrb_state *mrb, mrb_value obj, struct dump_arg *arg, int limit)
 
       khint_t cur_size = kh_size(arg->data);
       khint_t new_idx = kh_put(object_dump_table, mrb, arg->data, obj);
-      kh_value(arg->data, new_idx) = cur_size;
+      kh_value(object_dump_table, arg->data, new_idx) = cur_size;
 
       v = mrb_funcall_id(mrb, obj, s_mdump, 0);
       check_dump_arg(mrb, arg, s_mdump);
@@ -452,13 +452,13 @@ w_object(mrb_state *mrb, mrb_value obj, struct dump_arg *arg, int limit)
       }
       khint_t cur_size = kh_size(arg->data);
       khint_t new_idx = kh_put(object_dump_table, mrb, arg->data, obj);
-      kh_value(arg->data, new_idx) = cur_size;
+      kh_value(object_dump_table, arg->data, new_idx) = cur_size;
       return;
     }
 
     khint_t cur_size = kh_size(arg->data);
     khint_t new_idx = kh_put(object_dump_table, mrb, arg->data, obj);
-    kh_value(arg->data, new_idx) = cur_size;
+    kh_value(object_dump_table, arg->data, new_idx) = cur_size;
 
     hasiv = has_ivars(obj, ivtbl);
     if (hasiv)
@@ -469,8 +469,8 @@ w_object(mrb_state *mrb, mrb_value obj, struct dump_arg *arg, int limit)
       w_uclass(mrb, obj, arg->regexp_class, arg);
       w_byte(mrb, TYPE_REGEXP, arg);
       {
-        mrb_value src = mrb_funcall_id(mrb, obj, MRB_SYM(source), 0);
-        int opts = mrb_as_int(mrb, mrb_funcall_id(mrb, obj, MRB_SYM(options), 0));
+        mrb_value src = mrb_funcall_id(mrb, obj, mrb_intern_lit(mrb, "source"), 0);
+        int opts = mrb_as_int(mrb, mrb_funcall_id(mrb, obj, mrb_intern_lit(mrb, "options"), 0));
         mrb_ensure_string_type(mrb, src);
         w_bytes(mrb, RSTRING_PTR(src), RSTRING_LEN(src), arg);
         w_byte(mrb, (char)opts, arg);
@@ -571,7 +571,7 @@ w_object(mrb_state *mrb, mrb_value obj, struct dump_arg *arg, int limit)
           mrb_value mem;
           long i;
           w_long(mrb, len, arg);
-          mem = mrb_funcall_id(mrb, obj, MRB_SYM(members), 0); // rb_struct_members(obj);
+          mem = mrb_funcall_id(mrb, obj, mrb_intern_lit(mrb, "members"), 0); // rb_struct_members(obj);
           for (i = 0; i < len; i++)
           {
             w_symbol(mrb, mrb_symbol(RARRAY_PTR(mem)[i]), arg);

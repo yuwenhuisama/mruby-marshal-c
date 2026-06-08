@@ -30,18 +30,22 @@
 #define TYPE_IVAR 'I'
 #define TYPE_LINK '@'
 
-#define s_dump MRB_SYM(_dump)
-#define s_load MRB_SYM(_load)
-#define s_mdump MRB_SYM(marshal_dump)
-#define s_mload MRB_SYM(marshal_load)
-#define s_dump_data MRB_SYM(_dump_data)
-#define s_load_data MRB_SYM(_load_data)
-#define s_alloc MRB_SYM(_alloc)
-#define s_call MRB_SYM(call)
-#define s_getbyte MRB_SYM(getbyte)
-#define s_read MRB_SYM(read)
-#define s_write MRB_SYM(write)
-#define s_binmode MRB_SYM(binmode)
+// mruby 4.0.0 removed MRB_NO_PRESYM, so the compile-time MRB_SYM(x) macro can no
+// longer be used by this out-of-tree gem (its symbols are not in the host's
+// generated presym id.h). Intern the symbols at runtime instead; every use site
+// below has `mrb` in scope, and mrb_intern_lit yields the identical mrb_sym.
+#define s_dump mrb_intern_lit(mrb, "_dump")
+#define s_load mrb_intern_lit(mrb, "_load")
+#define s_mdump mrb_intern_lit(mrb, "marshal_dump")
+#define s_mload mrb_intern_lit(mrb, "marshal_load")
+#define s_dump_data mrb_intern_lit(mrb, "_dump_data")
+#define s_load_data mrb_intern_lit(mrb, "_load_data")
+#define s_alloc mrb_intern_lit(mrb, "_alloc")
+#define s_call mrb_intern_lit(mrb, "call")
+#define s_getbyte mrb_intern_lit(mrb, "getbyte")
+#define s_read mrb_intern_lit(mrb, "read")
+#define s_write mrb_intern_lit(mrb, "write")
+#define s_binmode mrb_intern_lit(mrb, "binmode")
 
 #define RSHIFT(x, y) ((x) >> (int)y)
 #define FLOAT_DIG 17
