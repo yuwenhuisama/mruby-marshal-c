@@ -329,9 +329,26 @@ w_ivar(mrb_state *mrb, mrb_value obj, struct iv_tbl *tbl, struct dump_call_arg *
   iv_foreach(mrb, tbl, w_obj_each, arg);
 }
 
+static int
+w_obj_count(mrb_state *mrb, mrb_sym id, mrb_value value, void *ud)
+{
+  int *count = (int *)ud;
+
+  (void)value;
+  if (id == mrb_intern_lit(mrb, "E"))
+  {
+    return 0; // continue
+  }
+  (*count)++;
+  return 0; // continue
+}
+
 static void
 w_objivar(mrb_state *mrb, mrb_value obj, struct dump_call_arg *arg)
 {
+  int count = 0;
+  mrb_iv_foreach(mrb, obj, w_obj_count, &count);
+  w_long(mrb, count, arg->arg);
   mrb_iv_foreach(mrb, obj, w_obj_each, arg);
 }
 
@@ -506,9 +523,13 @@ w_object(mrb_state *mrb, mrb_value obj, struct dump_arg *arg, int limit)
         break;
 
       case MRB_TT_STRING:
+        w_byte(mrb, TYPE_IVAR, arg);
         w_uclass(mrb, obj, mrb->string_class, arg);
         w_byte(mrb, TYPE_STRING, arg);
         w_bytes(mrb, RSTRING_PTR(obj), RSTRING_LEN(obj), arg);
+        w_long(mrb, 1, arg);
+        w_symbol(mrb, mrb_intern_lit(mrb, "E"), arg);
+        w_object(mrb, mrb_true_value(), arg, limit);
         break;
 
         // case TT_REGEXP:
